@@ -1,69 +1,198 @@
-import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { useState } from 'react';
-import { Button, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from "react";
+import { View, StyleSheet, TouchableOpacity, Text, Alert } from "react-native";
+import { CameraType, CameraView, Camera as ExpoCamera } from "expo-camera";
+import * as MediaLibrary from "expo-media-library";
+import * as Location from "expo-location";
+import { Camera, RotateCcw, Video, MapPin, Save } from "lucide-react-native";
+import { StatusBar } from "expo-status-bar";
 
-export default function chat() {
-  const [facing, setFacing] = useState<CameraType>('back');
-  const [permission, requestPermission] = useCameraPermissions();
+export default function CameraScreen() {
+  const [hasCameraPermission, setHasCameraPermission] = useState<
+    boolean | null
+  >(null);
+  const [hasMediaPermission, setHasMediaPermission] = useState<boolean | null>(
+    null
+  );
+  const [facing, setFacing] = useState<CameraType>("back");
+  const [isRecording, setIsRecording] = useState(false);
+  const [video, setVideo] = useState(false);
+  const cameraRef = useRef<ExpoCamera | null>(null);
 
-  if (!permission) {
-    // Camera permissions are still loading.
-    return <View />;
-  }
+  useEffect(() => {
+    (async () => {
+      const { status } = await ExpoCamera.requestCameraPermissionsAsync();
+      setHasCameraPermission(status === "granted");
 
-  if (!permission.granted) {
-    // Camera permissions are not granted yet.
-    return (
-      <View style={styles.container}>
-        <Text style={styles.message}>We need your permission to show the camera</Text>
-        <Button onPress={requestPermission} title="grant permission" />
-      </View>
-    );
-  }
+      const mediaStatus = await MediaLibrary.requestPermissionsAsync();
+      setHasMediaPermission(mediaStatus.status === "granted");
+    })();
+  }, []);
 
-  function toggleCameraFacing() {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
-  }
+  const flipCamera = () => {
+    setFacing((prev) => (prev === "back" ? "front" : "back"));
+  };
+
+  const getLocationInfo = async () => {
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") return null;
+    const location = await Location.getCurrentPositionAsync({});
+    console.log(location.coords);
+    return location.coords;
+  };
+
+  const takePicture = async () => {
+    if (!cameraRef.current) return;
+
+    const photo = await cameraRef.current.takePictureAsync();
+    const location = await getLocationInfo();
+
+    console.log("Photo URI:", photo.uri);
+    console.log("Location:", location);
+
+    if (hasMediaPermission) {
+      await MediaLibrary.createAssetAsync(photo.uri);
+      Alert.alert("Saved", "Photo saved to gallery.");
+    }
+  };
+
+  const recordVideo = async () => {
+    console.log("Is Recording clicked");
+    if (!cameraRef.current) return;
+
+    if (isRecording) {
+      cameraRef.current.stopRecording();
+      console.log("Recording stopped");
+      setIsRecording(false);
+    } else {
+      console.log("recording start");
+      setIsRecording(true);
+      const video = await cameraRef.current.recordAsync();
+      const location = await getLocationInfo();
+
+      console.log("Video URI:", video.uri);
+      console.log("Location:", location);
+
+      if (hasMediaPermission) {
+        await MediaLibrary.createAssetAsync(video.uri);
+        Alert.alert("Saved", "Video saved to gallery.");
+      }
+
+      setIsRecording(false);
+    }
+  };
+
+  if (hasCameraPermission === null) return <View />;
+  if (hasCameraPermission === false)
+    return <Text>No access to camera. Please allow permissions.</Text>;
 
   return (
-    <View style={styles.container}>
-      <CameraView style={styles.camera} facing={facing}>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={toggleCameraFacing}>
-            <Text style={styles.text}>Flip Camera</Text>
-          </TouchableOpacity>
+    <>
+    <StatusBar style="light" />
+      <View style={styles.container}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", padding: 10, marginTop: 40, paddingHorizontal: 20 }}>
+            <TouchableOpacity onPress={() => {}}>
+              <Text style={{ color: "#fff", fontSize: 16 }}>Auto</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => {}}>
+              <Text style={{ color: "#fff", fontSize: 16 }}>On</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => {}}>
+              <Text style={{ color: "#fff", fontSize: 16 }}>Off</Text>
+            </TouchableOpacity>
         </View>
-      </CameraView>
-    </View>
+        <CameraView ref={cameraRef} style={styles.camera} facing={facing} />
+        <View style={styles.controlsContainer}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "center",
+              marginBottom: 10,
+            }}
+          >
+            <TouchableOpacity
+              style={{
+                padding: 10,
+                borderRadius: 5,
+                marginHorizontal: 10,
+              }}
+              onPress={() => setVideo(false)}
+            >
+              <Text style={{ color: "white" }}>Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{
+                padding: 10,
+                borderRadius: 5,
+                marginHorizontal: 10,
+              }}
+              onPress={() => setVideo(true)}
+            >
+              <Text style={{ color: "white" }}>Video</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.controls}>
+            <TouchableOpacity onPress={flipCamera}>
+              <RotateCcw size={28} color="#fff" />
+            </TouchableOpacity>
+
+            {video === true ? (
+              <TouchableOpacity onPress={recordVideo}>
+                <View
+                  style={{
+                    width: 20,
+                    height: 20,
+                    backgroundColor: isRecording ? "black" : "red",
+                    borderWidth: isRecording ? 2 : 2,
+                    borderRadius: isRecording ? 5 : 10,
+                    borderColor: "white",
+                    transform: "scale(2.5)",
+                  }}
+                />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={takePicture}>
+                <View
+                  style={{
+                    width: 20,
+                    height: 20,
+                    backgroundColor: "grey",
+                    borderWidth: 2,
+                    borderRadius: 7,
+                    borderColor: "white",
+                    transform: "scale(2.5)",
+                  }}
+                />
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity onPress={getLocationInfo}>
+              <MapPin size={28} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-  },
-  message: {
-    textAlign: 'center',
-    paddingBottom: 10,
+    backgroundColor: "#000",
   },
   camera: {
     flex: 1,
   },
-  buttonContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: 'transparent',
-    margin: 64,
+  controls: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+    paddingVertical: 16,
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
-  button: {
-    flex: 1,
-    alignSelf: 'flex-end',
-    alignItems: 'center',
-  },
-  text: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: 'white',
+
+  controlsContainer: {
+    flexDirection: "column",
+    width: "100%",
   },
 });
